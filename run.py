@@ -8,4 +8,9 @@ if __name__ == "__main__":
     print(f"  AI Engine : {'Ready' if ai.is_ready() else 'Demo mode (add API key in app Settings)'}")
     print("  URL       : http://localhost:5000")
     print("=" * 50 + "\n")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(
+        debug=False,       # reloader disabled - prevents venv watch loop
+        use_reloader=False,
+        host="0.0.0.0",
+        port=5000,
+    )
