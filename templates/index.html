@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>InterviewIQ</title>
+  <meta name="description" content="Practice interviews from a resume and job description. Camera and microphone scores delivery. Answers are graded question by question."/>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+</head>
+<body>
+
+{% if not launched %}
+<div class="prelaunch" role="status">Preview. Public launch is held until a custom domain is attached. Set CUSTOM_DOMAIN in .env to match the production host.</div>
+{% endif %}
+
+<section id="landing-page" class="page active">
+  <nav class="navbar">
+    <div class="nav-logo">
+      <span class="logo-text">InterviewIQ</span>
+    </div>
+    <div class="nav-links">
+      <a href="#how-it-works" class="nav-link">How it works</a>
+      <a href="#" class="nav-link nav-link-review" id="nav-review-btn">Presentation review</a>
+    </div>
+    <button class="btn-primary nav-cta" id="start-btn" type="button">Start a session</button>
+  </nav>
+
+  <div class="hero-section">
+    <p class="hero-kicker">Local practice tool. Not a public product.</p>
+    <h1 class="hero-title">Practice a job interview against your resume and the posting you applied to.</h1>
+    <p class="hero-subtitle">
+      You upload a resume and a job description. The app writes questions for that role, records your face and voice while you answer, then scores each answer and writes a report you can export as PDF.
+    </p>
+    <div class="hero-actions">
+      <button class="btn-primary" id="hero-start-btn" type="button">Start a session</button>
+      <button class="btn-ghost" id="hero-demo-btn" type="button">Read the method</button>
+      <button class="btn-ghost" id="hero-review-btn" type="button">Review a recording</button>
+    </div>
+  </div>
+
+  <div class="how-block" id="how-it-works">
+    <h2 class="block-title">How a session runs</h2>
+    <ol class="how-list">
+      <li>
+        <strong>Intake.</strong>
+        Upload or paste a resume and a job description (PDF, DOCX, or TXT, 16 MB max).
+      </li>
+      <li>
+        <strong>Questions.</strong>
+        Seven questions are generated from that pair. Demo mode uses a fallback set if no Gemini key is set.
+      </li>
+      <li>
+        <strong>Answers.</strong>
+        Type or dictate. Webcam and microphone feed facial expression and voice volume into the score.
+      </li>
+      <li>
+        <strong>Report.</strong>
+        Per-question scores, session totals, and a PDF export. Nothing is stored after the session ends.
+      </li>
+    </ol>
+  </div>
+
+  <div class="method-block" id="method">
+    <h2 class="block-title">What is measured</h2>
+    <table class="plain-table">
+      <thead>
+        <tr><th>Signal</th><th>Source</th><th>Used for</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Answer text</td><td>Typed or speech-to-text</td><td>Relevance, depth, structure, specificity</td></tr>
+        <tr><td>Face</td><td>Webcam, on-device face-api models</td><td>Expression mix during the answer</td></tr>
+        <tr><td>Voice</td><td>Microphone, Web Audio RMS</td><td>Volume, energy, tension proxy</td></tr>
+      </tbody>
+    </table>
+    <p class="method-note">Expression and voice numbers are estimates from the browser, not clinical or hiring-grade biometrics.</p>
+  </div>
+
+  <footer class="site-footer">
+    <p>InterviewIQ. Preview build. Not launched.</p>
+  </footer>
+</section>
+
+<section id="upload-page" class="page">
+  <div class="page-header">
+    <button class="btn-back" id="upload-back-btn" type="button">Back</button>
+    <div class="step-indicator">
+      <div class="si-step active"><span class="si-dot">1</span><span class="si-label">Upload</span></div>
+      <div class="si-line"></div>
+      <div class="si-step"><span class="si-dot">2</span><span class="si-label">Interview</span></div>
+      <div class="si-line"></div>
+      <div class="si-step"><span class="si-dot">3</span><span class="si-label">Results</span></div>
+    </div>
+    <div class="header-spacer"></div>
+  </div>
+
+  <div class="upload-layout">
+    <div class="upload-heading">
+      <h2>Session setup</h2>
+      <p>Provide a resume and the job description. Questions are generated from those two documents only.</p>
+    </div>
+
+    <div class="offline-banner" id="offline-banner">
+      <span>Demo mode. Add a Gemini API key for generated questions and answer scoring.</span>
+      <button type="button" class="btn-ghost btn-sm" id="offline-settings-btn">Add API key</button>
+    </div>
+
+    <div class="upload-grid">
+      <div class="upload-card">
+        <div class="uc-header">
+          <div>
+            <h3>Resume</h3>
+            <p>PDF, DOCX, or TXT. 16 MB max.</p>
+          </div>
+        </div>
+
+        <div class="input-mode-tabs">
+          <button type="button" class="mode-tab active" id="resume-tab-upload">Upload file</button>
+          <button type="button" class="mode-tab" id="resume-tab-paste">Paste text</button>
+        </div>
+
+        <div id="resume-upload-panel">
+          <div class="drop-zone" id="drop-zone">
+            <div class="dz-content" id="dz-content">
+              <p class="dz-main">Drop the resume here</p>
+              <p class="dz-sub">or</p>
+              <label class="btn-ghost btn-sm" for="resume-file-input">Browse</label>
+              <input type="file" id="resume-file-input" accept=".pdf,.docx,.txt"/>
+            </div>
+            <div class="dz-file-preview" id="dz-preview" style="display:none">
+              <div class="dfp-info">
+                <div class="dfp-name" id="dfp-name">filename.pdf</div>
+                <div class="dfp-size" id="dfp-size">245 KB</div>
+              </div>
+              <button class="dfp-remove" id="dfp-remove" type="button">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="paste-area" style="display:none">
+          <textarea class="premium-textarea" id="resume-text-input" rows="8"
+            placeholder="Paste resume text"></textarea>
+        </div>
+      </div>
+
+      <div class="upload-card">
+        <div class="uc-header">
+          <div>
+            <h3>Job description</h3>
+            <p>Upload a file or paste the posting.</p>
+          </div>
+        </div>
+
+        <div class="input-mode-tabs">
+          <button type="button" class="mode-tab active" id="jd-tab-upload" data-mode="upload">Upload file</button>
+          <button type="button" class="mode-tab" id="jd-tab-paste" data-mode="paste">Paste text</button>
+        </div>
+
+        <div id="jd-upload-panel">
+          <div class="drop-zone drop-zone-sm" id="jd-drop-zone">
+            <div class="dz-content" id="jd-dz-content">
+              <p class="dz-main">Drop the job description here</p>
+              <p class="dz-sub">PDF, DOCX, or TXT</p>
+              <label class="btn-ghost btn-sm" for="jd-file-input">Browse</label>
+              <input type="file" id="jd-file-input" accept=".pdf,.docx,.txt"/>
+            </div>
+            <div class="dz-file-preview" id="jd-dz-preview" style="display:none">
+              <div class="dfp-info">
+                <div class="dfp-name" id="jd-dfp-name">filename.pdf</div>
+                <div class="dfp-size" id="jd-dfp-size">245 KB</div>
+              </div>
+              <button type="button" class="dfp-remove" id="jd-dfp-remove">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="jd-paste-panel" style="display:none">
+          <div class="role-chips">
+            <span class="role-chip" data-role="Software Engineer">Software Engineer</span>
+            <span class="role-chip" data-role="Data Scientist">Data Scientist</span>
+            <span class="role-chip" data-role="Product Manager">Product Manager</span>
+            <span class="role-chip" data-role="UX Designer">UX Designer</span>
+            <span class="role-chip" data-role="DevOps Engineer">DevOps Engineer</span>
+            <span class="role-chip" data-role="Marketing Manager">Marketing Manager</span>
+          </div>
+
+          <textarea class="premium-textarea" id="jd-input" rows="12"
+            placeholder="Paste the job description."></textarea>
+
+          <div class="jd-char-count">
+            <span id="jd-char-count">0</span> characters
+            <span class="jd-hint">(at least 100 characters works better)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="upload-action">
+      <button class="btn-primary btn-xl" id="generate-btn" type="button">Generate questions</button>
+      <p class="upload-disclaimer">Files are processed for this session and are not kept as a user account.</p>
+    </div>
+
+    <div class="gen-loading" id="gen-loading" style="display:none">
+      <div class="gen-loading-inner">
+        <div class="ai-spinner"></div>
+        <h3>Reading resume and job description</h3>
+        <div class="gen-steps" id="gen-steps">
+          <div class="gs-item active" id="gs-1">Resume</div>
+          <div class="gs-item" id="gs-2">Job requirements</div>
+          <div class="gs-item" id="gs-3">Question set</div>
+          <div class="gs-item" id="gs-4">Ready</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="upload-error" id="upload-error" style="display:none">
+      <span id="upload-error-msg">Something went wrong</span>
+    </div>
+  </div>
+</section>
+
+<section id="interview-page" class="page">
+  <div class="interview-header">
+    <div class="ih-left">
+      <button class="btn-back" id="interview-back-btn" type="button">Exit</button>
+      <div class="ih-session">
+        <div class="session-status">
+          <span class="status-dot active"></span>
+          <span id="ih-role">Interview</span>
+        </div>
+      </div>
+    </div>
+    <div class="ih-progress-section">
+      <div class="ih-qnum">Question <span id="current-q-num">1</span> of <span id="total-q-num">7</span></div>
+      <div class="ih-prog-bar"><div class="ih-prog-fill" id="ih-prog-fill"></div></div>
+    </div>
+    <div class="ih-right">
+      <div class="session-timer" id="session-timer">00:00</div>
+    </div>
+  </div>
+
+  <div class="interview-layout">
+    <div class="iv-camera-panel">
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Camera</span><span class="live-badge"><span class="live-dot"></span>Live</span></div>
+        <div class="video-wrapper" id="video-wrapper">
+          <video id="webcam" autoplay muted playsinline></video>
+          <canvas id="face-canvas"></canvas>
+          <div class="video-placeholder" id="video-placeholder">
+            <p>Starting camera</p>
+            <button type="button" class="btn-primary btn-sm" id="enable-camera-btn" style="display:none;margin-top:12px">Enable camera</button>
+          </div>
+        </div>
+        <div class="cam-meta"><span>Facial state:</span> <strong id="facial-status">-</strong></div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Face</span></div>
+        <div class="emotion-bars" id="emotion-bars">
+          <div class="emotion-bar-row"><span class="emotion-label">Composed</span><div class="bar-track"><div class="bar-fill" id="bar-neutral" style="--color:#57534e"></div></div><span class="bar-value" id="val-neutral">0%</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Engaged</span><div class="bar-track"><div class="bar-fill" id="bar-happy" style="--color:#1c1917"></div></div><span class="bar-value" id="val-happy">0%</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Analytical</span><div class="bar-track"><div class="bar-fill" id="bar-thoughtful" style="--color:#44403c"></div></div><span class="bar-value" id="val-thoughtful">0%</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Tension</span><div class="bar-track"><div class="bar-fill" id="bar-anxious" style="--color:#9a3412"></div></div><span class="bar-value" id="val-anxious">0%</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Stress</span><div class="bar-track"><div class="bar-fill" id="bar-stressed" style="--color:#7f1d1d"></div></div><span class="bar-value" id="val-stressed">0%</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Alert</span><div class="bar-track"><div class="bar-fill" id="bar-surprised" style="--color:#78716c"></div></div><span class="bar-value" id="val-surprised">0%</span></div>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Voice</span><span class="panel-tag" id="voice-analysis-status">-</span></div>
+        <div class="emotion-bars">
+          <div class="emotion-bar-row"><span class="emotion-label">Confidence</span><div class="bar-track"><div class="bar-fill" id="bar-voice-conf" style="--color:#1c1917"></div></div><span class="bar-value" id="mm-confidence">-</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Energy</span><div class="bar-track"><div class="bar-fill" id="bar-voice-energy" style="--color:#44403c"></div></div><span class="bar-value" id="mm-voice-energy">-</span></div>
+          <div class="emotion-bar-row"><span class="emotion-label">Stress</span><div class="bar-track"><div class="bar-fill" id="bar-voice-stress" style="--color:#7f1d1d"></div></div><span class="bar-value" id="mm-voice-stress">-</span></div>
+        </div>
+        <div class="cam-meta"><span>Vocal tone:</span> <strong id="voice-dominant">-</strong></div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Session</span></div>
+        <div class="mini-metrics">
+          <div class="mm-item"><div class="mm-val" id="mm-words">0</div><div class="mm-label">Words</div></div>
+          <div class="mm-item"><div class="mm-val" id="mm-eye">-</div><div class="mm-label">Presence</div></div>
+          <div class="mm-item"><div class="mm-val" id="session-q-progress">-</div><div class="mm-label">Progress</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="iv-main-panel">
+      <div class="question-card" id="question-card">
+        <div class="qc-meta">
+          <span class="qc-category" id="qc-category">Technical</span>
+          <span class="qc-difficulty" id="qc-difficulty">Medium</span>
+          <span class="qc-time">
+            <span id="qc-time">2 min</span>
+          </span>
+        </div>
+        <div class="qc-question" id="qc-question">Loading question</div>
+        <div class="qc-hint" id="qc-hint" style="display:none">
+          <span id="qc-hint-text"></span>
+        </div>
+      </div>
+
+      <div class="answer-card">
+        <div class="answer-header">
+          <span class="answer-label">Answer</span>
+          <div class="answer-tools">
+            <button class="voice-btn" id="voice-btn" title="Toggle voice input" type="button">
+              <span id="voice-label">Voice</span>
+            </button>
+            <button class="btn-text hint-toggle-btn" id="hint-toggle-btn" type="button">Show hint</button>
+          </div>
+        </div>
+        <textarea class="answer-textarea" id="answer-textarea" rows="9"
+          placeholder="Write the answer. Use a concrete example from your work."></textarea>
+        <div class="answer-footer">
+          <div class="answer-stats">
+            <span id="answer-word-count">0 words</span>
+            <span class="answer-quality" id="answer-quality"></span>
+          </div>
+          <div class="answer-actions">
+            <button class="btn-ghost" id="skip-btn" type="button">Skip</button>
+            <button class="btn-primary" id="next-btn" type="button">
+              <span id="next-btn-text">Analyze and next</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="analyzing-overlay" id="analyzing-overlay" style="display:none">
+          <div class="ao-spinner"></div>
+          <div class="ao-text">Scoring this answer</div>
+          <div class="ao-sub">Relevance, depth, and structure</div>
+        </div>
+
+        <div class="quick-result" id="quick-result" style="display:none">
+          <div class="qr-score-row">
+            <div class="qr-score" id="qr-score">85</div>
+            <div class="qr-grade" id="qr-grade">Good</div>
+          </div>
+          <div class="qr-bars">
+            <div class="qr-bar-row"><span>Relevance</span><div class="qr-track"><div class="qr-fill" id="qrf-relevance"></div></div><span id="qrv-relevance">0</span></div>
+            <div class="qr-bar-row"><span>Depth</span><div class="qr-track"><div class="qr-fill" id="qrf-depth"></div></div><span id="qrv-depth">0</span></div>
+            <div class="qr-bar-row"><span>Structure</span><div class="qr-track"><div class="qr-fill" id="qrf-structure"></div></div><span id="qrv-structure">0</span></div>
+            <div class="qr-bar-row"><span>Specificity</span><div class="qr-track"><div class="qr-fill" id="qrf-specificity"></div></div><span id="qrv-specificity">0</span></div>
+          </div>
+          <div class="qr-feedback" id="qr-feedback"></div>
+          <div class="qr-biometrics" id="qr-biometrics" style="display:none"></div>
+          <button class="btn-primary qr-continue-btn" id="qr-continue-btn" type="button">Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="iv-summary-panel">
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Progress</span></div>
+        <div class="progress-list" id="progress-list"></div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Notes</span></div>
+        <div class="tips-list" id="tips-list">
+          <div class="tip-item tip-info"><span>STAR: situation, task, action, result.</span></div>
+          <div class="tip-item tip-good"><span>Name a number or an outcome when you can.</span></div>
+          <div class="tip-item tip-warn"><span>Aim for 100 to 200 words per answer.</span></div>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-header"><span class="panel-title">Candidate</span></div>
+        <div class="candidate-info" id="candidate-info">
+          <div class="ci-name" id="ci-name">-</div>
+          <div class="ci-role" id="ci-role">-</div>
+          <div class="ci-summary" id="ci-summary">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results-page" class="page">
+  <div class="results-header">
+    <button class="btn-back" id="results-back-btn" type="button">New interview</button>
+    <h2 class="results-title">Session report</h2>
+    <button class="btn-primary" id="export-btn" type="button">Export PDF</button>
+  </div>
+
+  <div class="results-layout">
+    <div class="results-top">
+      <div class="big-score-card">
+        <div class="big-score-value" id="result-score">--</div>
+        <div class="big-score-label">Overall score</div>
+        <div class="big-score-grade" id="result-grade">-</div>
+        <div class="bsc-hire" id="bsc-hire">-</div>
+        <div class="bsc-readiness" id="bsc-readiness">-</div>
+      </div>
+      <div class="result-metrics-grid">
+        <div class="rmc"><div class="rmc-val" id="rm-confidence">-</div><div class="rmc-lbl">Avg delivery</div></div>
+        <div class="rmc"><div class="rmc-val" id="rm-eye">-</div><div class="rmc-lbl">Presence</div></div>
+        <div class="rmc"><div class="rmc-val" id="rm-best">-</div><div class="rmc-lbl">Best answer</div></div>
+        <div class="rmc"><div class="rmc-val" id="rm-worst">-</div><div class="rmc-lbl">Weakest answer</div></div>
+        <div class="rmc"><div class="rmc-val" id="rm-words">0</div><div class="rmc-lbl">Total words</div></div>
+        <div class="rmc"><div class="rmc-val" id="rm-duration">--</div><div class="rmc-lbl">Duration</div></div>
+      </div>
+    </div>
+
+    <div class="results-charts">
+      <div class="chart-card">
+        <h3>Score breakdown</h3>
+        <canvas id="results-radar-chart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Expression mix</h3>
+        <canvas id="results-pie-chart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Question scores</h3>
+        <canvas id="results-bar-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="qa-breakdown">
+      <h3 class="qab-title">By question</h3>
+      <div id="qa-accordion"></div>
+    </div>
+
+    <div class="coaching-report" id="coaching-report">
+      <h3 class="cr-title">Session notes</h3>
+      <div class="cr-summary" id="cr-summary">Loading report</div>
+      <div class="cr-grid">
+        <div class="cr-section">
+          <div class="cr-sec-header good">Strengths</div>
+          <ul id="cr-strengths"></ul>
+        </div>
+        <div class="cr-section">
+          <div class="cr-sec-header warn">Gaps</div>
+          <ul id="cr-improvements"></ul>
+        </div>
+        <div class="cr-section">
+          <div class="cr-sec-header info">Next steps</div>
+          <ul id="cr-actions"></ul>
+        </div>
+      </div>
+      <div class="cr-tips">
+        <h4>Practice notes</h4>
+        <div id="cr-tips-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-loading" id="report-loading">
+    <div class="rl-inner">
+      <div class="ai-spinner large"></div>
+      <h3>Writing the session report</h3>
+      <p>Reviewing scored answers</p>
+    </div>
+  </div>
+</section>
+
+<div class="api-key-modal" id="api-key-modal">
+  <div class="akm-backdrop" id="akm-backdrop"></div>
+  <div class="akm-card">
+    <h3>Gemini API key</h3>
+    <p class="akm-desc">
+      Get a key from
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>
+      and paste it below. Without a key, the app runs in demo mode.
+    </p>
+    <input type="password" id="api-key-input" class="akm-input" placeholder="AIza..." autocomplete="off"/>
+    <div class="akm-error" id="akm-error" style="display:none"></div>
+    <div class="akm-actions">
+      <button type="button" class="btn-ghost" id="akm-skip-btn">Continue in demo mode</button>
+      <button type="button" class="btn-primary" id="akm-save-btn">Save key</button>
+    </div>
+  </div>
+</div>
+
+<section id="review-page" class="page">
+  <!-- Top Navigation & Ethical Charter Header -->
+  <div class="review-header">
+    <button class="btn-back" id="review-back-btn" type="button">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M12 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Back
+    </button>
+    <div class="review-header-center">
+      <div class="review-header-tag">
+        Remote Collaboration &amp; Presentation Coaching
+      </div>
+      <h2 class="review-title">Video Meeting Feedback Tool</h2>
+      <p class="review-subtitle">Review recordings, track observable visual cues across the timeline, and calibrate your self-perception</p>
+    </div>
+    <div class="review-header-actions">
+      <button class="btn-charter" id="open-charter-btn" type="button" title="View Voluntary Practice & Ethical Principles">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Ethical Charter
+      </button>
+      <button class="btn-primary" id="review-export-btn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Export Coaching Summary
+      </button>
+    </div>
+  </div>
+
+  <!-- Ethical Principle Disclaimer Banner -->
+  <div class="ethical-banner">
+    <div class="ethical-banner-badge">NOTICE</div>
+    <div class="ethical-banner-text">
+      <strong>Voluntary Coaching Principle:</strong> Expression trends reflect <em>observable surface visual demeanor</em> (facial steadiness, smiles, posture stability) : <strong>not</strong> your internal thoughts or feelings. Designed strictly for voluntary practice, never surveillance.
+    </div>
+    <button class="ethical-banner-link" id="ethical-learn-more" type="button">Learn more</button>
+  </div>
+
+  <!-- Presentation Source Bar -->
+  <div class="presentation-source-bar">
+    <div class="ps-label">Presentation Source:</div>
+    <div class="ps-options">
+      <button class="btn-source-tab active" id="tab-source-upload" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Upload File
+      </button>
+      <button class="btn-source-tab" id="demo-keynote-btn" type="button">
+        <span class="demo-tag">Demo 1</span> All-Hands Keynote (03:15)
+      </button>
+      <button class="btn-source-tab" id="demo-product-btn" type="button">
+        <span class="demo-tag">Demo 2</span> Product Demo &amp; Q&amp;A (02:40)
+      </button>
+      <button class="btn-source-tab" id="demo-pitch-btn" type="button">
+        <span class="demo-tag">Demo 3</span> Executive Board Pitch (02:00)
+      </button>
+      <button class="btn-source-record" id="open-recorder-btn" type="button">
+        <span class="record-indicator"></span> Record 30s Practice Pitch
+      </button>
+    </div>
+  </div>
+
+  <div class="review-layout">
+    <!-- LEFT COLUMN: Video Player & Notes -->
+    <div class="review-left">
+
+      <!-- Upload Zone -->
+      <div class="review-upload-zone" id="review-upload-zone">
+        <div class="upload-icon-wrap">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 9l4 2.5L10 14V9z" fill="currentColor"/></svg>
+        </div>
+        <h3>Select recorded presentation video</h3>
+        <p>Formats: MP4, WebM, MOV, OGG. Max file size: 500MB. Processed locally in browser session.</p>
+        <div class="upload-actions-row">
+          <label class="btn-primary upload-label" for="review-video-input">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Choose Video File
+          </label>
+          <button class="btn-ghost" id="upload-try-demo-btn" type="button">Load Interactive Sample Demo</button>
+        </div>
+        <input type="file" id="review-video-input" accept="video/*">
+      </div>
+
+      <!-- Video Player Wrap -->
+      <div class="review-player-wrap" id="review-player-wrap" style="display:none">
+        <div class="review-player-header">
+          <div class="rph-title-wrap">
+            <span class="panel-title">Presentation Playback</span>
+            <span class="badge" id="review-video-name">video.mp4</span>
+          </div>
+          <div class="review-player-badges">
+            <div class="speed-selector" id="speed-selector">
+              <span class="speed-label">Speed:</span>
+              <button class="speed-btn active" data-speed="1" type="button">1x</button>
+              <button class="speed-btn" data-speed="1.25" type="button">1.25x</button>
+              <button class="speed-btn" data-speed="1.5" type="button">1.5x</button>
+            </div>
+            <button class="btn-ghost btn-xs" id="review-change-video" type="button">Change Video</button>
+          </div>
+        </div>
+
+        <!-- Video Display Container -->
+        <div class="review-video-container" id="review-video-container">
+          <video id="review-video" preload="metadata" playsinline></video>
+          <canvas id="review-demo-canvas" style="display:none;"></canvas>
+
+          <!-- Live Real-Time Expression Telemetry HUD -->
+          <div class="video-hud-overlay" id="video-hud-overlay">
+            <div class="hud-item" id="hud-composure">
+              <span class="hud-label">Composure:</span>
+              <span class="hud-val" id="hud-composure-val">--%</span>
+            </div>
+            <div class="hud-item" id="hud-warmth">
+              <span class="hud-label">Warmth:</span>
+              <span class="hud-val" id="hud-warmth-val">--%</span>
+            </div>
+            <div class="hud-item" id="hud-delivery">
+              <span class="hud-label">Cues:</span>
+              <span class="hud-val" id="hud-delivery-val">Calm &amp; Focused</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Synchronized Playback Controls -->
+        <div class="review-playback-controls">
+          <button class="rv-ctrl-btn" id="rv-skip-back-btn" title="Back 5s" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="rv-ctrl-btn rv-play-btn" id="rv-play-pause-btn" title="Play/Pause (Space)" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" id="rv-play-icon"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>
+          </button>
+          <button class="rv-ctrl-btn" id="rv-skip-fwd-btn" title="Forward 5s" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+
+          <!-- Interactive Timeline Scrubber -->
+          <div class="rv-timeline-wrap">
+            <div class="rv-progress-bar" id="rv-progress-bar">
+              <div class="rv-progress-fill" id="rv-progress-fill"></div>
+              <div class="rv-playhead" id="rv-playhead"></div>
+              <div class="rv-note-ticks" id="rv-note-ticks"></div>
+            </div>
+          </div>
+
+          <div class="rv-time-group">
+            <span class="rv-time" id="rv-current-time">0:00</span>
+            <span class="rv-time-slash">/</span>
+            <span class="rv-time rv-duration" id="rv-duration">0:00</span>
+          </div>
+
+          <button class="rv-ctrl-btn" id="rv-mute-btn" title="Mute/Unmute" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" id="rv-volume-icon"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Notes & Self-Assessment Panel -->
+      <div class="review-notes-panel" id="review-notes-panel" style="display:none">
+        <div class="panel-header">
+          <div class="ph-title-group">
+            <span class="panel-title">Presentation Notes &amp; Self-Assessment</span>
+            <div class="timestamp-badge" id="current-pin-time-badge">Pinned at: 0:00</div>
+          </div>
+          <div class="notes-hint">Pin moments while reviewing to compare self-ratings with detected cues</div>
+        </div>
+
+        <div class="note-input-row">
+          <!-- Text Input -->
+          <input type="text" id="note-text-input" class="note-text-input" placeholder="Note: Hesitation on slide transition, clear pause before metric..." maxlength="200">
+
+          <!-- Category Tag Selector -->
+          <div class="note-tags-row">
+            <span class="tags-label">Category:</span>
+            <div class="tag-pills" id="note-tag-pills">
+              <button class="tag-pill active" data-tag="General" type="button">General</button>
+              <button class="tag-pill" data-tag="Opening Hook" type="button">Opening Hook</button>
+              <button class="tag-pill" data-tag="Pacing &amp; Pauses" type="button">Pacing &amp; Pauses</button>
+              <button class="tag-pill" data-tag="Eye Contact" type="button">Eye Contact</button>
+              <button class="tag-pill" data-tag="Body Composure" type="button">Body Composure</button>
+              <button class="tag-pill" data-tag="Slide Transition" type="button">Slide Transition</button>
+              <button class="tag-pill" data-tag="Q&amp;A Handling" type="button">Q&amp;A Handling</button>
+              <button class="tag-pill" data-tag="Voice Modulation" type="button">Voice Modulation</button>
+            </div>
+          </div>
+
+          <!-- Multi-Dimensional Self-Rating Row -->
+          <div class="note-rating-row">
+            <div class="rating-subgroup">
+              <span class="rating-label">Self-rating:</span>
+              <div class="numeric-rating" id="note-star-rating">
+                <button type="button" class="num-rate-btn" data-val="1">1</button>
+                <button type="button" class="num-rate-btn" data-val="2">2</button>
+                <button type="button" class="num-rate-btn active" data-val="3">3</button>
+                <button type="button" class="num-rate-btn" data-val="4">4</button>
+                <button type="button" class="num-rate-btn" data-val="5">5</button>
+              </div>
+              <span class="selected-rating" id="selected-rating">3</span><span class="rating-max">/5</span>
+            </div>
+
+            <div class="rating-subgroup">
+              <span class="rating-label">Confidence:</span>
+              <select id="note-confidence-select" class="confidence-select">
+                <option value="Low">Low (Felt nervous)</option>
+                <option value="Moderate" selected>Moderate (Steady)</option>
+                <option value="High">High (Confident)</option>
+              </select>
+            </div>
+
+            <button class="btn-primary btn-sm" id="add-note-btn" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+              Pin Note at Timestamp
+            </button>
+          </div>
+        </div>
+
+        <!-- Notes Filter & Count Header -->
+        <div class="notes-list-header">
+          <div class="notes-count-info">
+            <span id="notes-count-val">0</span> notes pinned
+          </div>
+          <div class="notes-filter-tabs" id="notes-filter-tabs">
+            <button class="nft-tab active" data-filter="all" type="button">All</button>
+            <button class="nft-tab" data-filter="high" type="button">Rating 4-5</button>
+            <button class="nft-tab" data-filter="needs-work" type="button">Rating 1-2</button>
+          </div>
+        </div>
+
+        <!-- Notes List Container -->
+        <div class="notes-list" id="notes-list">
+          <div class="notes-empty">
+            <p><strong>No notes pinned yet</strong></p>
+            <p class="ne-sub">Pause at a key timestamp, enter your observation, and pin the note.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Expression Timeline & Self-Assessment Comparison -->
+    <div class="review-right">
+
+      <!-- Expression Timeline Panel -->
+      <div class="review-expr-panel" id="review-expr-panel">
+        <div class="panel-header">
+          <div class="ph-title-group">
+            <span class="panel-title">Observable Expression Timeline</span>
+            <span class="panel-subtitle">Multi-metric visual cue analysis over time</span>
+          </div>
+          <div class="panel-badges">
+            <span class="badge" id="review-analysis-badge">Upload video to analyze</span>
+          </div>
+        </div>
+
+        <!-- Placeholder before generation -->
+        <div class="review-expr-placeholder" id="review-expr-placeholder">
+          <span class="expr-placeholder-tag">TELEMETRY</span>
+          <h3>Timeline Ready for Generation</h3>
+          <p>Generate visual expression tracking across the duration of your recording.</p>
+          <button class="btn-primary" id="generate-analysis-btn" type="button" style="display:none;margin-top:12px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Generate Expression Analysis
+          </button>
+        </div>
+
+        <!-- Active Timeline Container -->
+        <div class="review-chart-section" id="review-chart-wrap" style="display:none">
+          <!-- Quick Jump Moment Chips -->
+          <div class="moment-chips-bar" id="moment-chips-bar">
+            <span class="chips-label">Notable Moments:</span>
+            <div class="chips-container" id="moment-chips-container">
+              <!-- Injected dynamically -->
+            </div>
+          </div>
+
+          <!-- Main Timeline Chart Canvas -->
+          <div class="review-chart-wrap">
+            <canvas id="review-timeline-chart"></canvas>
+          </div>
+
+          <!-- Timeline Metric Legend & Educational Guide -->
+          <div class="timeline-legend-guide">
+            <div class="tlg-item">
+              <span class="tlg-color-box composure-color"></span>
+              <div class="tlg-text">
+                <strong>Composure (Steadiness):</strong> Steady gaze, head stability, calm posture.
+              </div>
+            </div>
+            <div class="tlg-item">
+              <span class="tlg-color-box warmth-color"></span>
+              <div class="tlg-text">
+                <strong>Warmth &amp; Engagement:</strong> Smile presence, open facial cues, approachability.
+              </div>
+            </div>
+            <div class="tlg-item">
+              <span class="tlg-color-box energy-color"></span>
+              <div class="tlg-text">
+                <strong>Dynamic Energy:</strong> Expressive facial variety, vocal-visual dynamic inflection.
+              </div>
+            </div>
+            <div class="tlg-item">
+              <span class="tlg-color-box tension-color"></span>
+              <div class="tlg-text">
+                <strong>Tension Cues:</strong> Lip compression, brow furrowing, micro-fidgets.
+              </div>
+            </div>
+          </div>
+          <div class="chart-scrub-hint">Tip: Click anywhere on the graph to jump playback directly to that second.</div>
+        </div>
+      </div>
+
+      <!-- Self-Assessment vs Expression Comparison Panel -->
+      <div class="review-compare-panel" id="review-compare-panel" style="display:none">
+        <div class="panel-header">
+          <div class="ph-title-group">
+            <span class="panel-title">Self-Assessment vs. Expression Trends</span>
+            <span class="panel-subtitle">Compare self-evaluations with measured visual demeanor</span>
+          </div>
+          <span class="panel-badge-info" id="compare-calibrated-badge">Calibration Active</span>
+        </div>
+
+        <!-- Calibration Index Card -->
+        <div class="calibration-hero-card">
+          <div class="ch-score-box">
+            <div class="ch-score-num" id="ch-calibration-score">--%</div>
+            <div class="ch-score-label">Self-Awareness Calibration</div>
+          </div>
+          <div class="ch-breakdown">
+            <div class="ch-stat-pill under-pill" id="pill-underestimated" title="Moments where you felt nervous or rated yourself low, but looked composed">
+              <span class="ch-pill-num" id="cnt-underestimated">0</span>
+              <span class="ch-pill-txt">Hidden Strengths (Underestimated)</span>
+            </div>
+            <div class="ch-stat-pill calibrated-pill" id="pill-calibrated" title="Moments where your self-rating accurately matched your visual cues">
+              <span class="ch-pill-num" id="cnt-calibrated">0</span>
+              <span class="ch-pill-txt">Well-Calibrated Moments</span>
+            </div>
+            <div class="ch-stat-pill over-pill" id="pill-overestimated" title="Moments where self-rating was high, but visual tension cues spiked">
+              <span class="ch-pill-num" id="cnt-overestimated">0</span>
+              <span class="ch-pill-txt">Growth Opportunities</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="compare-chart-wrap">
+          <canvas id="compare-chart"></canvas>
+        </div>
+
+        <!-- Dynamic Gap Insights -->
+        <div class="compare-insights-title">Coaching Perceptions &amp; Calibration Gaps</div>
+        <div class="compare-insights" id="compare-insights">
+          <!-- Dynamic insights injected here -->
+        </div>
+      </div>
+
+      <!-- Summary Stats & Coaching Takeaways Panel -->
+      <div class="review-stats-panel" id="review-stats-panel" style="display:none">
+        <div class="panel-header">
+          <span class="panel-title">Presentation Session Summary</span>
+        </div>
+        <div class="review-stats-grid">
+          <div class="rs-stat">
+            <div class="rs-val" id="rs-duration">--</div>
+            <div class="rs-label">Total Duration</div>
+          </div>
+          <div class="rs-stat">
+            <div class="rs-val" id="rs-notes">0</div>
+            <div class="rs-label">Notes Annotated</div>
+          </div>
+          <div class="rs-stat">
+            <div class="rs-val" id="rs-avg-rating">--</div>
+            <div class="rs-label">Avg Self-Rating</div>
+          </div>
+          <div class="rs-stat">
+            <div class="rs-val" id="rs-composure-score">--%</div>
+            <div class="rs-label">Avg Composure</div>
+          </div>
+          <div class="rs-stat">
+            <div class="rs-val" id="rs-warmth-score">--%</div>
+            <div class="rs-label">Expressive Warmth</div>
+          </div>
+          <div class="rs-stat">
+            <div class="rs-val" id="rs-calibration-index">--%</div>
+            <div class="rs-label">Calibration Index</div>
+          </div>
+        </div>
+
+        <!-- Personalized Practice Coaching Takeaways -->
+        <div class="coaching-takeaways-wrap" id="coaching-takeaways-wrap">
+          <div class="ctw-title">Actionable Delivery Observations:</div>
+          <div class="ctw-list" id="coaching-takeaways-list">
+            <!-- Injected dynamically -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== ETHICAL AI CHARTER MODAL ===== -->
+<div class="modal-backdrop" id="charter-modal" style="display:none">
+  <div class="charter-modal-card">
+    <div class="cmc-header">
+      <div class="cmc-title-group">
+        <div class="cmc-tag">GUIDELINES</div>
+        <div>
+          <h3>Voluntary Practice &amp; Ethical Principles</h3>
+          <p>Commitment to honest coaching without psychological claims</p>
+        </div>
+      </div>
+      <button class="cmc-close" id="close-charter-btn" type="button">&times;</button>
+    </div>
+    <div class="cmc-body">
+      <div class="cmc-pillar">
+        <div class="pillar-num">1</div>
+        <div class="pillar-content">
+          <h4>Observable Cues Are Not Internal Emotions</h4>
+          <p>Visual presentation analysis tracks outward facial cues, gaze steadiness, and smile frequencies. It <strong>never</strong> claims to read a person&rsquo;s internal feelings, authenticity, sincerity, or character.</p>
+        </div>
+      </div>
+      <div class="cmc-pillar">
+        <div class="pillar-num">2</div>
+        <div class="pillar-content">
+          <h4>Voluntary Self-Coaching Only</h4>
+          <p>This tool is built solely for speakers practicing voluntarily on their own terms. It must <strong>never</strong> be used for involuntary workplace monitoring, surveillance, or automated evaluation.</p>
+        </div>
+      </div>
+      <div class="cmc-pillar">
+        <div class="pillar-num">3</div>
+        <div class="pillar-content">
+          <h4>Honoring Natural &amp; Cultural Baselines</h4>
+          <p>Different cultures, personality temperaments, and neurodivergent individuals exhibit different baseline facial expressions. Metrics measure personal relative trajectory, not a standardized behavioral mould.</p>
+        </div>
+      </div>
+      <div class="cmc-pillar">
+        <div class="pillar-num">4</div>
+        <div class="pillar-content">
+          <h4>100% Client-Side Privacy</h4>
+          <p>Video frames, audio streams, and notes remain inside your local browser session. No recordings are retained or transmitted to external third-party servers.</p>
+        </div>
+      </div>
+    </div>
+    <div class="cmc-footer">
+      <button class="btn-primary" id="ack-charter-btn" type="button">Understood &amp; Agree</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LIVE WEBCAM RECORDING MODAL ===== -->
+<div class="modal-backdrop" id="record-modal" style="display:none">
+  <div class="record-modal-card">
+    <div class="cmc-header">
+      <div class="cmc-title-group">
+        <div class="cmc-tag">RECORDER</div>
+        <div>
+          <h3>Record Practice Pitch</h3>
+          <p>Record a 30-second presentation take to immediately analyze your delivery</p>
+        </div>
+      </div>
+      <button class="cmc-close" id="close-record-btn" type="button">&times;</button>
+    </div>
+    <div class="record-preview-wrap">
+      <video id="record-preview-video" autoplay muted playsinline></video>
+      <div class="record-countdown-overlay" id="record-countdown" style="display:none">3</div>
+      <div class="record-timer-badge" id="record-timer-badge" style="display:none">00:30</div>
+    </div>
+    <div class="record-modal-footer">
+      <button class="btn-ghost" id="cancel-record-btn" type="button">Cancel</button>
+      <button class="btn-primary" id="start-recording-btn" type="button">
+        Start 30s Recording
+      </button>
+      <button class="btn-primary btn-danger" id="stop-recording-btn" type="button" style="display:none">
+        Stop &amp; Review Now
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/emotion.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
