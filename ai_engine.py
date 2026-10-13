@@ -17,13 +17,17 @@ config.load_env()
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────
-#  Gemini Setup
+#  Gemini Setup  (google-genai SDK)
 # ─────────────────────────────────────────────
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
     _GENAI_IMPORTED = True
 except ImportError:
     _GENAI_IMPORTED = False
+
+_MODEL = "gemini-2.0-flash-lite"
+_gemini_client: object = None  # google.genai.Client instance
 
 
 def _load_api_key() -> str:
@@ -39,15 +43,17 @@ def save_api_key(api_key: str) -> bool:
 def validate_api_key(api_key: str) -> tuple[bool, str]:
     """Test an API key. Returns (success, message)."""
     if not _GENAI_IMPORTED:
-        return False, "google-generativeai package not installed"
+        return False, "google-genai package not installed. Run: pip install google-genai"
     key = api_key.strip()
     if not key or key in config.PLACEHOLDER_KEYS:
         return False, "Invalid API key"
     try:
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content("Reply with exactly: OK")
-        if response.text:
+        client = genai.Client(api_key=key)
+        resp = client.models.generate_content(
+            model=_MODEL,
+            contents="Reply with exactly: OK",
+        )
+        if resp.text:
             return True, "API key verified"
         return False, "Empty response from Gemini"
     except Exception as exc:
@@ -55,8 +61,8 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
 
 
 def _configure_gemini() -> bool:
-    """Configure Gemini from current environment. Returns True if ready."""
-    global _GEMINI_READY
+    """Build a Gemini client from current environment. Returns True if ready."""
+    global _GEMINI_READY, _gemini_client
     if not _GENAI_IMPORTED:
         _GEMINI_READY = False
         return False
@@ -67,7 +73,7 @@ def _configure_gemini() -> bool:
         return False
 
     try:
-        genai.configure(api_key=api_key)
+        _gemini_client = genai.Client(api_key=api_key)
         _GEMINI_READY = True
         return True
     except Exception:
@@ -152,18 +158,18 @@ def _parse_json_response(text: str) -> dict:
 #  Gemini API Helper
 # ─────────────────────────────────────────────
 def _call_gemini(prompt: str, max_retries: int = 3) -> str:
-    """Call Gemini 1.5 Flash with retry logic."""
+    """Call Gemini via google-genai SDK with retry logic."""
     if not _configure_gemini():
         raise RuntimeError(
             "Gemini API key not configured. Run: python setup_env.py YOUR_API_KEY"
         )
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
     for attempt in range(max_retries):
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            response = _gemini_client.models.generate_content(
+                model=_MODEL,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
                     temperature=0.7,
                     max_output_tokens=4096,
                 ),
