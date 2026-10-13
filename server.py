@@ -90,7 +90,7 @@ def set_api_key():
 
         ok, message = validate_api_key(api_key)
         if not ok:
-            return error(f"Invalid API key: {message}", 400)
+            return error(message, 400)
 
         save_api_key(api_key)
         logger.info("Gemini API key configured successfully")
