@@ -25,9 +25,25 @@ try:
 except ImportError:
     _GENAI_IMPORTED = False
 
-# Primary model (override with env var GEMINI_MODEL). Fallbacks are tried on 404.
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite")
-_FALLBACK_MODELS = ["gemini-2.0-flash-lite", "gemini-1.5-flash"]
+import socket
+
+# Force IPv4 socket resolution to prevent blackholed IPv6 dual-stack timeouts on Windows
+try:
+    _orig_getaddrinfo = socket.getaddrinfo
+    def _ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+    socket.getaddrinfo = _ipv4_getaddrinfo
+except Exception:
+    pass
+
+# Primary model (override with env var GEMINI_MODEL). Fallbacks are tried on 404/503.
+_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+_FALLBACK_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.8-flash",
+]
 
 
 def _model_candidates() -> list[str]:
@@ -60,8 +76,16 @@ def _is_model_not_found(msg: str) -> bool:
     return "404" in m or "not_found" in m or "no longer available" in m
 
 
+def _is_transient_or_model_error(msg: str) -> bool:
+    m = msg.lower()
+    return (_is_model_not_found(m)
+            or "503" in m or "unavailable" in m or "high demand" in m
+            or "504" in m or "deadline_exceeded" in m or "timeout" in m or "timed out" in m
+            or "resource_exhausted" in m or "429" in m or "quota" in m or "rate limit" in m)
+
+
 def _is_permanent_error(msg: str) -> bool:
-    return _is_bad_key_error(msg) or _is_model_not_found(msg) or "invalid_argument" in msg.lower()
+    return _is_bad_key_error(msg) or "invalid_argument" in msg.lower()
 
 
 def save_api_key(api_key: str) -> bool:
@@ -76,9 +100,23 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
         return False, "google-genai package not installed. Run: pip install google-genai"
     key = api_key.strip()
     if not key or key in config.PLACEHOLDER_KEYS:
-        return False, "API key is empty or a placeholder - enter a real AIza... key"
+        return False, "API key is empty or a placeholder - enter a valid key"
 
-    client = genai.Client(api_key=key)
+    client = genai.Client(
+        api_key=key,
+        http_options=genai_types.HttpOptions(timeout=12000),
+    )
+
+    # 1. Verify key authenticity with Google API
+    try:
+        next(iter(client.models.list()), None)
+    except Exception as exc:
+        err = str(exc)
+        if _is_bad_key_error(err):
+            return False, "API key is invalid. Please check it and try again."
+        return False, f"Could not verify key: {err}"
+
+    # 2. Test generation across candidate models
     last_error = ""
     for model in _model_candidates():
         try:
@@ -91,12 +129,15 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
             last_error = "Empty response from Gemini"
         except Exception as exc:
             last_error = str(exc)
-            if _is_model_not_found(last_error):
-                continue  # try next model; this is NOT a key problem
             if _is_bad_key_error(last_error):
-                return False, "Invalid API key. Please check it and try again."
+                return False, "API key is invalid. Please check it and try again."
+            if _is_transient_or_model_error(last_error):
+                logger.info("Model %s unavailable during check, trying next: %s", model, last_error)
+                continue
             return False, f"Could not verify key: {last_error}"
-    return False, f"No available Gemini model worked. Last error: {last_error}"
+
+    # Key is valid and authenticated, models are temporarily in high demand
+    return True, "API key verified"
 
 
 def _configure_gemini(force: bool = False) -> bool:
@@ -114,7 +155,10 @@ def _configure_gemini(force: bool = False) -> bool:
     if not force and _gemini_client is not None and _client_key == api_key:
         return True
     try:
-        _gemini_client = genai.Client(api_key=api_key)
+        _gemini_client = genai.Client(
+            api_key=api_key,
+            http_options=genai_types.HttpOptions(timeout=30000),
+        )
         _client_key = api_key
         _GEMINI_READY = True
         return True
@@ -233,8 +277,8 @@ def _call_gemini(prompt: str, max_retries: int = 3) -> str:
                 last_error = "Empty response from Gemini"
             except Exception as e:
                 last_error = str(e)
-                if _is_model_not_found(last_error):
-                    logger.warning("Model %s unavailable, trying next", model)
+                if _is_transient_or_model_error(last_error):
+                    logger.warning("Model %s unavailable (%s), trying fallback", model, last_error)
                     break  # go to next model
                 if _is_permanent_error(last_error):
                     raise RuntimeError(f"Gemini API error: {last_error}")
