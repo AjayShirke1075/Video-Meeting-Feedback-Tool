@@ -279,7 +279,7 @@ function startInterview() {
   Session.startTime=Date.now();
   Session.elapsed=0;
   Session.wordCount=0;
-  Session.dominantEmotions={happy:0,neutral:0,anxious:0,thoughtful:0,surprised:0};
+  Session.dominantEmotions={happy:0,neutral:0,anxious:0,thoughtful:0,surprised:0,stressed:0};
 
   // Populate candidate info panel
   document.getElementById('ih-role').textContent=Session.candidateRole+' Interview';
@@ -879,7 +879,7 @@ async function saveApiKey() {
       return;
     }
     hideApiKeyModal();
-    updateOfflineBanner(false);
+    updateOfflineBanner(true);
     if (input) input.value = '';
     alert('Gemini API key saved! Full AI analysis is now enabled.');
   } catch (e) {

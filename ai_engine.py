@@ -42,7 +42,8 @@ _FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-flash-lite-latest",
-    "gemini-3.8-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
 ]
 
 
@@ -260,7 +261,8 @@ def _call_gemini(prompt: str, max_retries: int = 3) -> str:
         )
 
     last_error = ""
-    for model in _model_candidates():
+    models = _model_candidates()
+    for model_idx, model in enumerate(models):
         for attempt in range(max_retries):
             try:
                 response = _gemini_client.models.generate_content(
@@ -278,7 +280,12 @@ def _call_gemini(prompt: str, max_retries: int = 3) -> str:
             except Exception as e:
                 last_error = str(e)
                 if _is_transient_or_model_error(last_error):
-                    logger.warning("Model %s unavailable (%s), trying fallback", model, last_error)
+                    logger.warning(
+                        "Model %s unavailable (%s), trying next fallback", model, last_error
+                    )
+                    # Brief delay before trying the next model
+                    if model_idx < len(models) - 1:
+                        time.sleep(1)
                     break  # go to next model
                 if _is_permanent_error(last_error):
                     raise RuntimeError(f"Gemini API error: {last_error}")

@@ -8,6 +8,7 @@ import io
 from datetime import datetime
 
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 
 
 def _safe(text: str) -> str:
@@ -23,10 +24,10 @@ class InterviewReportPDF(FPDF):
         self.rect(0, 0, 210, 28, "F")
         self.set_font("Helvetica", "B", 11)
         self.set_text_color(201, 169, 98)
-        self.cell(0, 10, "INTERVIEWIQ", ln=True, align="L")
+        self.cell(0, 10, "INTERVIEWIQ", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
         self.set_font("Helvetica", "", 8)
         self.set_text_color(160, 165, 175)
-        self.cell(0, 4, "Executive Interview Assessment Report", ln=True, align="L")
+        self.cell(0, 4, "Executive Interview Assessment Report", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
         self.ln(8)
 
     def footer(self):
@@ -39,7 +40,7 @@ class InterviewReportPDF(FPDF):
         self.ln(4)
         self.set_font("Helvetica", "B", 12)
         self.set_text_color(201, 169, 98)
-        self.cell(0, 8, title, ln=True)
+        self.cell(0, 8, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.set_draw_color(201, 169, 98)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(4)
@@ -56,7 +57,7 @@ class InterviewReportPDF(FPDF):
         self.cell(60, 6, label)
         self.set_font("Helvetica", "B", 9)
         self.set_text_color(30, 35, 45)
-        self.cell(0, 6, value, ln=True)
+        self.cell(0, 6, value, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
 
 def generate_pdf(session: dict, report: dict | None = None) -> bytes:
@@ -78,13 +79,13 @@ def generate_pdf(session: dict, report: dict | None = None) -> bytes:
     # Title block
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_text_color(20, 24, 32)
-    pdf.cell(0, 12, "Interview Performance Report", ln=True)
+    pdf.cell(0, 12, "Interview Performance Report", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(80, 85, 95)
-    pdf.cell(0, 6, f"Candidate: {name}", ln=True)
-    pdf.cell(0, 6, f"Role: {role}", ln=True)
-    pdf.cell(0, 6, f"Date: {datetime.now().strftime('%B %d, %Y at %H:%M')}", ln=True)
-    pdf.cell(0, 6, f"Session Duration: {duration}", ln=True)
+    pdf.cell(0, 6, f"Candidate: {name}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 6, f"Role: {role}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 6, f"Date: {datetime.now().strftime('%B %d, %Y at %H:%M')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 6, f"Session Duration: {duration}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(6)
 
     # Score highlight box

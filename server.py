@@ -134,7 +134,7 @@ def upload():
         if not job_description:
             return error("Please upload a job description file or paste the job description text")
 
-        if len(job_description) < 50:
+        if len(job_description) < 100:
             return error("Job description is too short - paste at least 100 characters for best results")
 
         resume_text = _read_uploaded_file("resume")
